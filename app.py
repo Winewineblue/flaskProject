@@ -6,8 +6,8 @@ from lxml import etree
 import sqlConn
 from crawler import Resourcefrom
 from bs4 import BeautifulSoup
-from datetime import datetime
 import re
+import json
 
 
 
@@ -63,6 +63,7 @@ def zhihu_app(url_list):
 
     conn.close()
     cursor.close
+    return 'ok'
 
 
 @app.route('/CSDN', methods=['POST'])
@@ -104,13 +105,19 @@ def CSDN(url_list):
             print(f"{url_blog}:{e}")
             continue
     conn.close()
+    return 'ok'
 
 @app.route('/url_pool', methods=['POST'])
-def url_zhihu(url_list):
+def url_zhihu():
     sorce= 'zhihu'
     data = request.get_data()
-    task_id =  data.decode('utf-8')
+    task_id =data.decode('utf-8')
     conn, cursor, sql= sqlConn.connect_mysql()
+    e_sql="select pramater from crawler_task where id="+task_id
+    cursor.execute(e_sql)
+    url_list=cursor.fetchall()
+    url_list=url_list[0][0].split('\r\n')
+
     xpath_str = '//div[@class="RichText ztext Post-RichText css-1g0fqss"]//p[@data-pid]/a/@href'
     if len(url_list)== 1:
         r = Resourcefrom.reuturn_urlpoolist(url_list[0], xpath_str)
@@ -120,14 +127,20 @@ def url_zhihu(url_list):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                       'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
     }
+    print(type(r))
+    p=0
+    length = len(r)
+    for q_url in r:
+        p += 1
+        opercentage = float((p / length) * 100)
+        percentage=round(opercentage,2)
 
-    for i in range(1, len(r)):
-        length = len(r)
-        percentage = (i / length) * 100
-        time.sleep(1)
-
-        q_url = r[i]
-        question_id = q_url.split('/')[-3]
+        print(p,length,percentage)
+        # time.sleep(1)
+        update="update crawler_task set progress=+" + str(percentage) +" where id=" +task_id
+        cursor.execute(update)
+        conn.commit()
+        question_id = q_url.split('/')[-1]
 
         url = 'https://api.zhihu.com/v4/questions/' + question_id + '/answers?order_by=&show_detail=1'
 
@@ -144,27 +157,23 @@ def url_zhihu(url_list):
             'x-udid': 'AIDAlfY0qguPTkq2Y0YbY0qgqg2Y0qg2Y0g2Y0g',
         }
         try:
-            r = requests.get(q_url, headers=headers)
-            r.encoding = 'utf-8'
-            soup = BeautifulSoup(r.text, 'html.parser')
-            target_div = soup.find('div', class_='QuestionPage')
-            title = target_div.find_all(name='meta')[0]['content']
             crawlertime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
             for i in range(0, 20, 5):
                 params = {'offset': i}
-                r = requests.get(url, api_headers=headers, params=params)
-                res = json.loads(r.text)
-                for item in res['data']:
+                r = requests.get(url, headers=api_headers, params=params).json()
+                # res = json.loads(r.text)
+                for item in r['data']:
+                    title = item['question']['title']
                     author = item['author']['name']
                     content = item['excerpt']
                     createtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(item['created_time']))
-                    cursor.execute(sql, (crawlertime,title,createtime,author,content,sorce,q_url,task_id))
-            cursor.execute(sql, (url_blog,))
-            conn.commit()
+                    cursor.execute(sql, (crawlertime, title, createtime, author, content, sorce, q_url, task_id))
+                    conn.commit()
         except Exception as e:
-            print(f"{url_blog}:{e}")
-            continue
+            print(f"{q_url}:{e}")
+        continue
     conn.close()
+    return 'ok'
 
 
 
