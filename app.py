@@ -15,7 +15,7 @@ app = Flask(__name__)
 CORS(app, supports_credentials=True)#解决flask中的跨域问题
 
 @app.route('/zhihu_app', methods=['POST'])
-def zhihu_app(url_list):
+def zhihu_app():
     data = request.get_data()
     task_id =  data.decode('utf-8')
     sorce='zhihu'
@@ -66,12 +66,16 @@ def zhihu_app(url_list):
     return 'ok'
 
 
-@app.route('/CSDN', methods=['POST'])
-def CSDN(url_list):
-    conn, cursor, sql= sqlConn.connect_mysql()
+@app.route('/csdn', methods=['POST'])
+def csdn():
     sorce= 'CSDN'
     data = request.get_data()
     task_id =  data.decode('utf-8')
+    conn, cursor, sql= sqlConn.connect_mysql()
+    e_sql="select pramater from crawler_task where id="+task_id
+    cursor.execute(e_sql)
+    url_list=cursor.fetchall()
+    url_list=url_list[0][0].split('\r\n')
     xpath_str = '//div[@class="content"]/a/@href'
     if len(url_list)== 1:
         r = Resourcefrom.reuturn_urlpoolist(url_list[0], xpath_str)
@@ -93,12 +97,7 @@ def CSDN(url_list):
             createtime = re.search(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', createtime_text).group()
             crawlertime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
             cursor.execute(sql, (
-                crawlertime,
-                title,
-                createtime,
-                author,
-                content,
-                url_blog,
+                crawlertime, title, createtime, author, content, sorce, url_blog, task_id,
             ))
             conn.commit()
         except Exception as e:
